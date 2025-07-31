@@ -1,0 +1,433 @@
+---
+title: "GLM Project"
+author: "Rohith Anugolu"
+date: "`r format(Sys.Date(), '%A, %B %d, %Y')`"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load the packages
+
+```{r loadPackages, message=FALSE, warning=FALSE}
+library(tidymodels)
+library(tidyverse)
+library(ggformula)
+library(GGally)
+library(skimr)
+library(discrim)
+library(dplyr)
+```
+
+### Import the datasets
+
+```{r}
+pfi_2016 <- readxl::read_xlsx("pfi-data.xlsx", sheet = "curated 2016")
+pfi_2019 <- readxl::read_xlsx("pfi-data.xlsx", sheet = "curated 2019")
+```
+
+#### Check for missing values in both datasets
+
+```{r}
+pfi_2016 |>
+  skim() |>
+  dplyr::select(-numeric.hist)
+```
+
+```{r}
+pfi_2019 |>
+  skim() |>
+  dplyr::select(-numeric.hist)
+```
+
+**\textcolor{blue}{No missing values were found in both the datasets}**
+
+#### Check the relation between the potential predictor and response variables
+
+```{r}
+pfi_2016 |>
+  dplyr::select(SEGRADES, HHPARN16X, PARGRADEX, EDCPUB, INTACC, SEABSNT, SEFUTUREX, TTLHHINC) |>
+  ggpairs()
+```
+
+```{r}
+pfi_2019 |>
+  dplyr::select(SEGRADES, HHPARN19X, PARGRADEX, EDCPUB, INTACC, SEABSNT, SEFUTUREX, TTLHHINC) |>
+  ggpairs()
+```
+
+#### Concatenate both the datasets
+
+```{r}
+pfi_data <- rbind(pfi_2016 |>
+                    mutate(HHPARNX = HHPARN16X) |>
+                    dplyr::select(SEGRADES, HHPARNX, PARGRADEX, EDCPUB, INTACC, SEABSNT, TTLHHINC),
+                  pfi_2019 |>
+                    mutate(HHPARNX = HHPARN19X) |>
+                    dplyr::select(SEGRADES, HHPARNX, PARGRADEX, EDCPUB, INTACC, SEABSNT, TTLHHINC)
+                  )
+```
+
+
+```{r}
+pfi_data |>
+  glimpse()
+```
+
+```{r}
+pfi_data |>
+  dplyr::select(SEGRADES, HHPARNX, PARGRADEX, EDCPUB, INTACC, SEABSNT, TTLHHINC) |>
+  ggpairs()
+```
+
+
+#### Encode all the variables and convert them to factors
+
+**\textcolor{blue}{Create a new variable "GRADE" that simplifies "SEGRADES" into 5 categories ("A", "B", "C", "D", "Other")}**
+
+**\textcolor{blue}{Create a new variable "PARENT" that categorizes parental structure of household into four levels ("Both", Mother", "Father", "None")}**
+
+**\textcolor{blue}{Create a new variable "HAS\_POST\_SEC" that categorizes parent or guardian highest education into two levels ("Post Secondary", "Not Post Secondary")}**
+
+**\textcolor{blue}{Create a new variable "PUBLIC\_SCHOOL" that categorizes type of school into two levels ("Public", "Non public")}**
+
+**\textcolor{blue}{Create a new variable "INTERNET\_ACCESS" that categorizes household with internet access into two levels ("Yes", "No")}**
+
+**\textcolor{blue}{Create a new variable "NO\_OF\_ABSENT" that categorizes number of days a student was absent into three levels ("0-10 days", "11-20 days", "Other")}**
+
+**\textcolor{blue}{Create a new variable "INCOME\_CAT" that categorizes total household income into three levels ("0-100K", "100-200K", "200K or more")}**
+
+```{r}
+pfi <- pfi_data |>
+  mutate(GRADE = case_match(SEGRADES,
+                    1 ~ "A",
+                    2 ~ "B",
+                    3 ~ "C",
+                    4 ~ "D",
+                    c(5,-1) ~ "Other"),
+         PARENT = case_match(HHPARNX,
+                             1 ~ "Both",
+                             2 ~ "Mother",
+                             3 ~ "Father",
+                             4 ~ "None"),
+         HAS_POST_SEC = case_match(PARGRADEX,
+                                 c(1,2) ~ "No",
+                                 c(3,4,5) ~ "Yes"),
+         PUBLIC_SCHOOL = case_match(EDCPUB,
+                                    1 ~ "Yes",
+                                    2 ~ "No"),
+         INTERNET_ACCESS = case_match(INTACC,
+                                     c(1,2,3) ~ "Yes",
+                                     4 ~ "No"),
+         NO_OF_ABSENT = case_match(SEABSNT,
+                                   c(1,2) ~ "0-10 days",
+                                   c(3,4) ~ "11-20 days",
+                                   .default = "Other"),
+         INCOME_CAT = case_match(TTLHHINC,
+                                 c(1:8) ~ "$0-100K",
+                                 c(9:10) ~ "$100-200K",
+                                 c(11:12) ~ "$200K or more"),
+  GRADE = factor(GRADE, levels = c("Other", "D", "C", "B", "A")),
+  PARENT = factor(PARENT, levels = c("None", "Father", "Mother", "Both")),
+  HAS_POST_SEC = factor(HAS_POST_SEC, levels = c("No", "Yes")),
+  PUBLIC_SCHOOL = factor(PUBLIC_SCHOOL, levels = c("No", "Yes")),
+  INTERNET_ACCESS = factor(INTERNET_ACCESS, levels = c("No", "Yes")),
+  NO_OF_ABSENT = factor(NO_OF_ABSENT, levels = c("0-10 days","11-20 days","Other")),
+  INCOME_CAT = factor(INCOME_CAT, levels = c("$0-100K", "$100-200K", "$200K or more"))
+  ) |>
+  dplyr::select(GRADE, PARENT, HAS_POST_SEC, PUBLIC_SCHOOL, INTERNET_ACCESS, NO_OF_ABSENT, INCOME_CAT)
+```
+
+
+**Let's check the relationship between GRADE and the variables NO_OF_ABSENT and INCOME_CAT**
+
+```{r}
+pfi |>
+  ggbivariate("GRADE", c("PUBLIC_SCHOOL", "INCOME_CAT"), title = "Student Grade outcome by School and Parents Income Category")
+```
+
+### Train and test split
+
+```{r}
+set.seed(631)
+
+# Split the dataset into training (75%) and testing (25%)
+pfi_split <- initial_split(pfi, prop = 0.75, strata = GRADE)
+pfi_train <- training(pfi_split)
+pfi_test <- testing(pfi_split)
+```
+
+### Define k-fold cross validation with 5 levels
+
+```{r}
+pfi.folds <- vfold_cv(pfi_train, v=5, strata = GRADE)
+```
+
+### Multinomial Regression
+
+```{r}
+multi_spec <- multinom_reg() |>
+  set_engine("nnet")
+
+multi_wf <- workflow() |>
+  add_model(multi_spec) |>
+  add_formula(as.formula("GRADE ~ ."))
+
+fit_multi <- multi_wf |>
+  fit_resamples(pfi.folds, control=control_resamples(save_pred=TRUE, save_workflow=TRUE, extract=extract_model))
+
+multi_metrics_train <- collect_metrics(fit_multi) |>
+  mutate(Model = "Multinomial Regression", Data = "Train")
+
+multi_metrics_train
+```
+
+#### Confusion Matrix for Multinomial train data
+
+```{r}
+cv_predictions_multi <- collect_predictions(fit_multi)
+
+# Confusion matrix
+conf_mat_multi <- cv_predictions_multi %>% 
+  count(GRADE, .pred_class, .drop = FALSE)
+
+conf_mat_multi %>% 
+  pivot_wider(
+    names_from = .pred_class,
+    values_from = n
+  )
+```
+
+
+```{r}
+conf_mat_multi %>% 
+  ggplot(aes(x = GRADE, y = n, fill = .pred_class)) +
+  geom_bar(stat = "identity") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    main = "Predicted vs Actual GRADE"
+    ) +
+  theme_minimal() + 
+  theme(legend.position = "top")
+```
+
+#### Fit the model
+
+```{r}
+multi_model <- multinom_reg() |>
+  set_engine("nnet") |>
+  fit(GRADE ~ ., data = pfi_train)
+
+tidy(multi_model) %>% 
+  print(n = Inf) # This will display all rows of the tibble
+```
+
+**The log-odds of a student who got "Other/No" grade vs "A" grade.**
+  
+```{r}
+tidy(multi_model) %>%
+  filter(y.level=='A') %>%
+  dplyr::select(estimate,term)
+```
+
+$$
+\begin{aligned}
+\log\left(\frac{\hat{p}_{\texttt{"A"}}}{\hat{p}_{\texttt{"Other"}}}\right) = 
+& -1.1039 \\ 
+& + 0.46164431{\space}PARENTFather \\ 
+& + 0.16219859{\space}PARENTMother \\ 
+& + 0.27154298{\space}PARENTBoth \\ 
+& + 0.10870736{\space}HAS\_POST\_SECYes \\ 
+& - 0.15197641{\space}PUBLIC\_SCHOOLYes \\ 
+& + 0.03235633{\space}INTERNET\_ACCESSYes \\ 
+& - 0.15881349{\space}NO\_OF\_ABSENT11-20 days \\ 
+& - 0.07506882{\space}NO\_OF\_ABSENTOther \\ 
+& + 0.06715767{\space}INCOME\_CAT100-200K \\ 
+& + 0.08357023{\space}INCOME\_CAT200K or more
+\end{aligned}
+$$
+
+#### Predict using the test data
+
+```{r}
+pfi_multi_aug <- augment(multi_model, new_data = pfi_test) 
+pfi_multi_aug
+```
+
+#### Check accuracy and ROC_AUC
+
+```{r}
+multi_test_metrics <- rbind(
+pfi_multi_aug |>
+  metrics(truth = GRADE, estimate = .pred_class) |>
+  dplyr::filter(.metric == "accuracy") |>
+  mutate(Model = "Multinomial Regression", Data = "Test"),
+pfi_multi_aug |>
+  roc_auc(truth = GRADE, .pred_A, .pred_B, .pred_C, .pred_D, .pred_Other) |>
+  mutate(Model = "Multinomial Regression", Data = "Test")
+)
+
+multi_test_metrics
+```
+
+### Linear Discriminant Analysis
+
+```{r}
+lda_spec <- discrim_linear() %>%
+  set_mode("classification") %>%
+  set_engine("MASS")
+
+lda_wf <- workflow() |>
+  add_model(lda_spec) |>
+  add_formula(as.formula("GRADE ~ ."))
+
+fit_lda <- lda_wf |>
+  fit_resamples(pfi.folds, control=control_resamples(save_pred=TRUE, save_workflow=TRUE, extract=extract_model))
+
+lda_metrics_train <- collect_metrics(fit_lda) |>
+  mutate(Model = "LDA", Data = "Train")
+
+lda_metrics_train
+```
+
+#### Confusion Matrix for LDA train data
+
+```{r}
+cv_predictions_lda <- collect_predictions(fit_lda)
+
+# Confusion matrix
+conf_mat_lda <- cv_predictions_lda %>% 
+  count(GRADE, .pred_class, .drop = FALSE)
+
+conf_mat_lda %>% 
+  pivot_wider(
+    names_from = .pred_class,
+    values_from = n
+  )
+```
+
+
+```{r}
+conf_mat_lda %>% 
+  ggplot(aes(x = GRADE, y = n, fill = .pred_class)) +
+  geom_bar(stat = "identity") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    main = "Predicted vs Actual GRADE"
+    ) +
+  theme_minimal() + 
+  theme(legend.position = "top")
+```
+
+#### Fit the model
+
+```{r}
+lda_model <- discrim_linear() %>%
+  set_mode("classification") %>%
+  set_engine("MASS") |>
+  fit(GRADE ~ ., data = pfi_train)
+
+lda_model
+```
+
+
+#### Predict using the test data
+
+```{r}
+pfi_lda_aug <- augment(lda_model, new_data = pfi_test) 
+pfi_lda_aug
+```
+
+#### Check accuracy and ROC_AUC
+
+```{r}
+lda_test_metrics <- rbind(
+pfi_lda_aug |>
+  metrics(truth = GRADE, estimate = .pred_class) |>
+  dplyr::filter(.metric == "accuracy") |>
+  mutate(Model = "LDA", Data = "Test"),
+pfi_lda_aug |>
+  roc_auc(truth = GRADE, .pred_A, .pred_B, .pred_C, .pred_D, .pred_Other) |>
+  mutate(Model = "LDA", Data = "Test")
+)
+
+lda_test_metrics
+```
+
+### Model Evalution & Comparison
+
+**Comparison on Model Performance for train data**
+
+```{r}
+train_plot <- rbind(multi_metrics_train, lda_metrics_train) |>
+  dplyr::filter(.metric %in% c("accuracy", "roc_auc")) |>
+  ggplot(aes(x = Model, y = mean, fill = .metric)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Model Performance Comparison on Train Data (Multinomial vs LDA)", 
+       y = "Value", 
+       x = "Model", 
+       fill = "Metric") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.2)) +
+  theme_minimal()
+
+train_plot
+```
+
+**Comparison on Model Performance for test data**
+
+```{r}
+test_plot <- rbind(multi_test_metrics, lda_test_metrics) |>
+  ggplot(aes(x = Model, y = .estimate, fill = .metric)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Model Performance Comparison on Test Data (Multinomial vs LDA)", 
+       y = "Value", 
+       x = "Model", 
+       fill = "Metric") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.2)) +
+  theme_minimal()
+
+test_plot
+```
+
+
+```{r}
+# Combine train and test metrics
+all_metrics <- bind_rows(multi_metrics_train |>
+                           mutate(.estimate = mean) |>
+                           dplyr::select(.metric, .estimate, Model, Data), 
+                         lda_metrics_train  |>
+                           mutate(.estimate = mean) |>
+                           dplyr::select(.metric, .estimate, Model, Data), 
+                         multi_test_metrics |>
+                           dplyr::select(.metric, .estimate, Model, Data), 
+                         lda_test_metrics |>
+                           dplyr::select(.metric, .estimate, Model, Data)) |>
+  filter(.metric %in% c("accuracy", "roc_auc")) 
+
+ggplot(all_metrics, aes(x = Model, y = .estimate, fill = .metric)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(. ~ Data) +
+  labs(title = "Model Performance Comparison (Train vs Test)", 
+       y = "Metric Value", x = "Model", fill = "Metric") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.2)) +
+  theme_minimal()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
