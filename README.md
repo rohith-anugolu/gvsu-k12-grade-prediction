@@ -34,13 +34,13 @@ This project predicts student grade outcomes using demographic and academic feat
 ## 🔗 Resources
 
 - 📄 `k12_grade_prediction.Rmd`: Full R Markdown analysis with code and commentary  
-- 📑 `STA631_Project2_Report.pdf`: Final report with results and interpretation (course submission version)
+- 📑 `k12_grade_prediction_report.pdf`: Final report with results and interpretation (course submission version)
 
 ---
 
 ## 📂 Files
 
 - `k12_grade_prediction.Rmd`: Reproducible analysis and modeling code  
-- `STA631_Project2_Report.pdf`: Final presentation/report formatted for academic review  
+- `k12_grade_prediction_report.pdf`: Final presentation/report formatted for academic review  
 - `README.md`: This file
 
